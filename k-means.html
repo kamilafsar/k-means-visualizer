@@ -41,14 +41,14 @@
 			dot.title = "x: " + x + ", y: " + y
 			this.el.appendChild(dot)
 		}
-		Graph.prototype.drawClusters = function(clusters) {
+		Graph.prototype.drawClusters = function(moveCentroid) {
 			this.el.innerHTML = ""
-			clusters.forEach(function(cluster) {
+			moveCentroid.forEach(function(move, k) {
 				// draw centroid
-				this.drawDot(cluster.centroid.x, cluster.centroid.y, "centroid")
+				this.drawDot(move.mean.x, move.mean.y, "centroid")
 				// draw clusterItems
-				var className = "dot dot" + Math.floor(Math.random()*8)
-				cluster.clusterItems.forEach(function(clusterItem) {
+				var className = "dot dot" + k
+				move.clusterItems.forEach(function(clusterItem) {
 					// - 1, because dot is 3px 
 					this.drawDot(
 						Math.floor(clusterItem.x / this.ratio.x) - 1,
@@ -63,6 +63,8 @@
 			var rows        = data.split('\n'),
 				fieldsCount = rows[0].split(',').length,
 				vectors     = []
+
+// TODO regularize data
 
 			for (var i = 1; i < rows.length; i++) {
 				var fields = rows[i].split(',')
@@ -94,31 +96,35 @@
 				xLabel  = getSelectedOption("xaxes"),
 				yLabel  = getSelectedOption("yaxes"),
 				data    = document.getElementsByName("data")[0].value,
-				clusterItems = vectorize(xLabel, yLabel, data)
+				clusterItems = vectorize(xLabel, yLabel, data);
 
 			xLabel.max = max(clusterItems.map(function(v) { return v.x }))
 			yLabel.max = max(clusterItems.map(function(v) { return v.y }))
 
-			// create clusters with random centroids
-			var clusters = []
-			for (var i = 0; i < K; i++)
-				clusters.push({ centroid: clusterItems[Math.floor(Math.random() * clusterItems.length)], clusterItems: [] })
-
-			// assign all clusterItems to first cluster as a starting point
-			clusters[0].clusterItems = clusterItems
-
-			// draw graph
 			var graph = new Graph(xLabel, yLabel)
+			var moveCentroid = kMeans(5, clusterItems, 100);
+			graph.drawClusters(moveCentroid)
 
-			function doRound(round) {
-				console.log("working pass " + round)
-				clusters = distortionFunction(clusters)
-				graph.drawClusters(clusters)
+			//var d = +new Date
 
-				if (round < rounds)
-					setTimeout(function() {  doRound(round + 1) }, 16)
-			}
-			doRound(0)
+			//var p = new Parallel(_.range(100).map(function() { return clusterItems }), { evalPath: "eval.js" })
+			//p.require(_);
+		//	p.require("k-means.js")
+			//p.map(function(clusterItems) {
+			//	return kMeans(5, clusterItems, 100)
+			//})
+		// 	.reduce(function(data) {
+		//		console.log(data)
+		//		return 1;
+		//	}).then(function(data) {
+		//		console.log(data);
+		//		console.log("AAANDD OUT", +new Date - d)
+		//		graph.drawClusters(moveCentroid)
+		//	})
+			
+
+
+			
 		}
 	</script>
 </head>
