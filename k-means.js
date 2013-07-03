@@ -11,66 +11,95 @@ function Vector(x, y) {
 	this.x = x
 	this.y = y
 }
+Vector.prototype.add = function(v) {
+	return new Vector(this.x + v.x, this.y + v.y)
+}
 Vector.prototype.subtract = function(v) {
 	return new Vector(this.x - v.x, this.y - v.y)
 }
-Vector.prototype.lessThan = function(v) {
-	return Math.abs(this.x + this.y) < Math.abs(v.x + v.y)
+Vector.prototype.length = function() {
+	return Math.sqrt(Math.pow(this.x, 2) + Math.pow(this.y, 2));
+}
+Vector.prototype.distance = function(v) {
+	return this.subtract(v).length();
+}
+Vector.prototype.clone = function() {
+	return new Vector(this.x, this.y)
+}
+Vector.prototype.toString = function() {
+	return "[" + this.x + "," + this.y + "]";
 }
 
-Array.prototype.flatMap = function(fun) {
-	var m = this.map(fun), r = []
-	for (var i = 0; i < m.length; i++)
-		for (var j = 0; j < m[i].length; j++)
-			r.push(m[i][j])
-	return r
-}
-
-function mean(vs) {
-	var x = 0, y = 0, len = vs.length
-	for (var i = 0; i < len; i++) {
-		x += vs[i].x
-		y += vs[i].y
+var Vectors = {
+	mean: function(vs) {
+		var s = Vectors.sum(vs), m = vs.length;
+		return new Vector(s.x / m, s.y / m);
+	},
+	sum: function(arr) {
+		return _.reduce(arr, function(a,b) { return a.add(b); });
 	}
-	return new Vector(x / len, y / len)
 }
 
 function assert(test, msg) {
 	if (!test) throw msg
 }
 
-function distortionFunction(clusters) {
-	var centroids    = clusters.map(function(c) { return c.centroid }),
-		clusterItems = clusters.flatMap(function(c) { return c.clusterItems }),
-	 	m            = clusterItems.length,
-		K            = centroids.length
-
+function kMeans(K, clusterItems, iterations) {
 	assert(K > 1, "Number of clusters (K) should be more than 1.")
-	assert(K < m, "Number of clusters (K) should be less than the of the size training set.")
+	assert(K < clusterItems.length, "Number of clusters (K) should be less than the of the size training set.")
 
-	// 1. cluster assignment
-	var clusterAssignmentResult = centroids.map(function() { return [] })
-	for (var i = 0; i < m; i++) {
-		var ci           = clusterItems[i],
-			// compute distance for first centroid
-			minDelta     = ci.subtract(centroids[0]),
-			nearestIndex = 0
-
-		for (var k = 1; k < K; k++) {
-			var delta = ci.subtract(centroids[k])
-			if (delta.lessThan(minDelta)) {
-				nearestIndex = k;
-				minDelta = delta;
-			}
-		}
-		clusterAssignmentResult[nearestIndex].push(ci)
-	}
-
-	// 2. move centroid
-	var cleanResult = clusterAssignmentResult.filter(function(r) { return r.length > 0 })
-	for (var k = 0; k < cleanResult.length; k++)
-		cleanResult[k] = { centroid: mean(cleanResult[k]), clusterItems: cleanResult[k] }
+	var centroids = createRandomCentroids(K, clusterItems);
 	
-	return cleanResult
+	return (function loop(i, distortion) {
+		// 1. Cluster Assignment
+		// find nearest centroid for each cluster item
+		var clusterAssignment = clusterAssignmentStep(centroids, clusterItems);
+		// 2. Move Centroid
+		// calculate new positions for the centroids
+		var moveCentroid = moveCentroidStep(clusterAssignment);
+		// 3. Set new Centoids, and continue
+		centroids = _.pluck(moveCentroid, "mean");
+
+		var d = computeDistortion(clusterItems.length, moveCentroid);
+
+		assert(!distortion || d <= distortion, "OHNOES! Something must be wrong with the algorithm!");
+		
+		return d != distortion ? loop(i--, d)
+							   : moveCentroid;
+
+	})(iterations);
 }
 
+function createRandomCentroids(K, clusterItems) {
+	return _.range(0, K).map(function() {
+		return clusterItems[Math.floor(Math.random() * clusterItems.length)].clone();
+	})
+}
+
+function clusterAssignmentStep(centroids, clusterItems) {	
+	return clusterItems.map(function(ci) {
+		var mapped = centroids.map(function(centroid, k) {
+			return [k, ci.distance(centroid)];
+		});
+		var nearest = _.reduce(mapped, function(min, seed) {
+			return min[1] < seed[1] ? min : seed;
+		});
+		return [nearest[0], ci];
+	});
+}
+
+function moveCentroidStep(clusterAssignment) {
+	var grouped = _.groupBy(clusterAssignment, function(ca) { return ca[0] });
+	return _.map(grouped, function(clusterItems, k) {
+		var vs = clusterItems.map(function(ci) { return ci[1] })
+		return { k: parseInt(k), mean: Vectors.mean(vs), clusterItems: vs };
+	});
+}
+
+function sum(arr) { return _.reduce(arr, function(a, b) { return a + b }) }
+function computeDistortion(m, moveCentroid) {
+	var sums = sum(moveCentroid.map(function(move) {
+		return sum(move.clusterItems.map(function(ci) { return Math.pow(ci.distance(move.mean), 2) }));
+	}));
+	return new Vector(sums / m, sums / m).length();
+}
